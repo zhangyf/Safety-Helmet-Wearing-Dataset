@@ -24,8 +24,11 @@ from gluoncv.utils import LRScheduler, LRSequential
 from gluoncv.data import VOCDetection
 
 classes = ['hat', 'person']
+
+
 class VOCLike(VOCDetection):
     CLASSES = ['hat', 'person']
+
     def __init__(self, root, splits, transform=None, index_map=None, preload_label=True):
         super(VOCLike, self).__init__(root, splits, transform, index_map, preload_label)
 
@@ -33,7 +36,7 @@ class VOCLike(VOCDetection):
 def parse_args():
     parser = argparse.ArgumentParser(description='Train YOLO networks with random input shape.')
     parser.add_argument('--network', type=str, default='darknet53',
-                        #darknet53  mobilenet1.0 mobilenet0.25
+                        # darknet53  mobilenet1.0 mobilenet0.25
                         help="Base network name which serves as feature extraction base.")
     parser.add_argument('--data-shape', type=int, default=416,
                         help="Input data shape for evaluation, use 320, 416, 608... " +
@@ -44,17 +47,17 @@ def parse_args():
                         help='Training dataset. Now support voc.')
     parser.add_argument('--num-workers', '-j', dest='num_workers', type=int,
                         default=0, help='Number of data workers, you can use larger '
-                        'number to accelerate data loading, if you CPU and GPUs are powerful.')
+                                        'number to accelerate data loading, if you CPU and GPUs are powerful.')
     parser.add_argument('--gpus', type=str, default='0',
                         help='Training with GPUs, you can specify 1,3 for example.')
     parser.add_argument('--epochs', type=int, default=100,
                         help='Training epochs.')
     parser.add_argument('--resume', type=str, default='',
                         help='Resume from previously saved parameters if not None. '
-                        'For example, you can resume from ./yolo3_xxx_0123.params')
+                             'For example, you can resume from ./yolo3_xxx_0123.params')
     parser.add_argument('--start-epoch', type=int, default=0,
                         help='Starting epoch for resuming, default is 0 for new training.'
-                        'You can specify it to 100 for example to start from 100 epoch.')
+                             'You can specify it to 100 for example to start from 100 epoch.')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate, default is 0.001')
     parser.add_argument('--lr-mode', type=str, default='step',
@@ -90,7 +93,7 @@ def parse_args():
                         help='Use synchronize BN across devices.')
     parser.add_argument('--no-random-shape', action='store_true',
                         help='Use fixed size(data-shape) throughout the training, which will be faster '
-                        'and require less memory. However, final model will be slightly worse.')
+                             'and require less memory. However, final model will be slightly worse.')
     parser.add_argument('--no-wd', action='store_true',
                         help='whether to remove weight decay on bias, and beta/gamma for batchnorm layers.')
     parser.add_argument('--mixup', action='store_true',
@@ -100,6 +103,7 @@ def parse_args():
     parser.add_argument('--label-smooth', action='store_true', help='Use label smoothing.')
     args = parser.parse_args()
     return args
+
 
 def get_dataset(dataset, args):
     if dataset.lower() == 'voc':
@@ -121,10 +125,12 @@ def get_dataset(dataset, args):
         train_dataset = MixupDetection(train_dataset)
     return train_dataset, val_dataset, val_metric
 
+
 def get_dataloader(net, train_dataset, val_dataset, data_shape, batch_size, num_workers, args):
     """Get dataloader."""
     width, height = data_shape, data_shape
-    batchify_fn = Tuple(*([Stack() for _ in range(6)] + [Pad(axis=0, pad_val=-1) for _ in range(1)]))  # stack image, all targets generated
+    # stack image, all targets generated
+    batchify_fn = Tuple(*([Stack() for _ in range(6)] + [Pad(axis=0, pad_val=-1) for _ in range(1)]))
     if args.no_random_shape:
         train_loader = gluon.data.DataLoader(
             train_dataset.transform(YOLO3DefaultTrainTransform(width, height, net, mixup=args.mixup)),
@@ -141,15 +147,17 @@ def get_dataloader(net, train_dataset, val_dataset, data_shape, batch_size, num_
         batch_size, False, batchify_fn=val_batchify_fn, last_batch='keep', num_workers=num_workers)
     return train_loader, val_loader
 
+
 def save_params(net, best_map, current_map, epoch, save_interval, prefix):
     current_map = float(current_map)
     if current_map > best_map[0]:
         best_map[0] = current_map
         net.save_parameters('{:s}_best.params'.format(prefix, epoch, current_map))
-        with open(prefix+'_best_map.log', 'a') as f:
+        with open(prefix + '_best_map.log', 'a') as f:
             f.write('{:04d}:\t{:.4f}\n'.format(epoch, current_map))
     if save_interval and epoch % save_interval == 0:
         net.save_parameters('{:s}_{:04d}_{:.4f}.params'.format(prefix, epoch, current_map))
+
 
 def validate(net, val_data, ctx, eval_metric):
     """Test on validation dataset."""
@@ -182,6 +190,7 @@ def validate(net, val_data, ctx, eval_metric):
         # update metric
         eval_metric.update(det_bboxes, det_ids, det_scores, gt_bboxes, gt_ids, gt_difficults)
     return eval_metric.get()
+
 
 def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipeline"""
@@ -267,7 +276,8 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             cls_losses = []
             with autograd.record():
                 for ix, x in enumerate(data):
-                    obj_loss, center_loss, scale_loss, cls_loss = net(x, gt_boxes[ix], *[ft[ix] for ft in fixed_targets])
+                    obj_loss, center_loss, scale_loss, cls_loss = net(x, gt_boxes[ix],
+                                                                      *[ft[ix] for ft in fixed_targets])
                     sum_losses.append(obj_loss + center_loss + scale_loss + cls_loss)
                     obj_losses.append(obj_loss)
                     center_losses.append(center_loss)
@@ -284,8 +294,10 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                 name2, loss2 = center_metrics.get()
                 name3, loss3 = scale_metrics.get()
                 name4, loss4 = cls_metrics.get()
-                logger.info('[Epoch {}][Batch {}], LR: {:.2E}, Speed: {:.3f} samples/sec, {}={:.3f}, {}={:.3f}, {}={:.3f}, {}={:.3f}'.format(
-                    epoch, i, trainer.learning_rate, batch_size/(time.time()-btic), name1, loss1, name2, loss2, name3, loss3, name4, loss4))
+                logger.info(
+                    '[Epoch {}][Batch {}], LR: {:.2E}, Speed: {:.3f} samples/sec, {}={:.3f}, {}={:.3f}, {}={:.3f}, {}={:.3f}'.format(
+                        epoch, i, trainer.learning_rate, batch_size / (time.time() - btic), name1, loss1, name2, loss2,
+                        name3, loss3, name4, loss4))
             btic = time.time()
 
         name1, loss1 = obj_metrics.get()
@@ -293,7 +305,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
         name3, loss3 = scale_metrics.get()
         name4, loss4 = cls_metrics.get()
         logger.info('[Epoch {}] Training cost: {:.3f}, {}={:.3f}, {}={:.3f}, {}={:.3f}, {}={:.3f}'.format(
-            epoch, (time.time()-tic), name1, loss1, name2, loss2, name3, loss3, name4, loss4))
+            epoch, (time.time() - tic), name1, loss1, name2, loss2, name3, loss3, name4, loss4))
         if not (epoch + 1) % args.val_interval:
             # consider reduce the frequency of validation to save time
             map_name, mean_ap = validate(net, val_data, ctx, eval_metric)
@@ -303,6 +315,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
         else:
             current_map = 0.
         save_params(net, best_map, current_map, epoch, args.save_interval, args.save_prefix)
+
 
 if __name__ == '__main__':
     args = parse_args()
@@ -319,7 +332,7 @@ if __name__ == '__main__':
     # use sync bn if specified
     if args.syncbn and len(ctx) > 1:
         net = get_model(net_name, pretrained_base=True, norm_layer=gluon.contrib.nn.SyncBatchNorm,
-                        norm_kwargs={'num_devices': len(ctx)}, transfer='voc',classes=classes) #fix to transfer
+                        norm_kwargs={'num_devices': len(ctx)}, transfer='voc', classes=classes)  # fix to transfer
         async_net = get_model(net_name, pretrained_base=False, classes=classes)  # used by cpu worker
     else:
         net = get_model(net_name, pretrained_base=True, classes=classes)
